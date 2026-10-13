@@ -32,12 +32,24 @@ jobs:
           accept-android-sdk-licenses: true
           log-accepted-android-sdk-licenses: false
      
-      - name: Install Android SDK packages
+       - name: Install Android SDK packages
+        shell: bash
         run: |
+          set -euxo pipefail
+
+          echo "JAVA_HOME=$JAVA_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          java -version
+          sdkmanager --version
+
           sdkmanager --install \
             "platform-tools" \
             "platforms;android-34" \
             "build-tools;34.0.0"
+
+          test -d "$ANDROID_HOME/platform-tools"
+          test -d "$ANDROID_HOME/platforms/android-34"
+          test -d "$ANDROID_HOME/build-tools/34.0.0"
 
       - name: Install Android build tools
         run: |
@@ -108,6 +120,28 @@ jobs:
           test -f "$HOME/.android/debug.keystore"
 
 
+             - name: Verify Android export configuration
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          echo "Java:"
+          java -version
+
+          echo "Android SDK:"
+          test -n "$ANDROID_HOME"
+          test -d "$ANDROID_HOME"
+          ls -la "$ANDROID_HOME"
+
+          echo "Debug keystore:"
+          test -f "$HOME/.android/debug.keystore"
+
+          echo "Godot export templates:"
+          ls -la "$HOME/.local/share/godot/export_templates/4.3.stable/"
+          test -f "$HOME/.local/share/godot/export_templates/4.3.stable/android_debug.apk"
+
+          echo "Godot editor settings:"
+          cat "$HOME/.config/godot/editor_settings-4.tres"
 
       - name: Import Godot project
         run: |
@@ -116,7 +150,9 @@ jobs:
       - name: Export APK
         shell: bash
         run: |
+          set -o pipefail
           mkdir -p build
+
           "$GODOT_BIN" --headless --path . \
             --export-debug "Android" \
             build/PuzzlePetHospital-Phase1.apk \
