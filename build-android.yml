@@ -1,0 +1,28 @@
+name: Build Android APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+permissions:
+  contents: read
+jobs:
+  export-apk:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.3.0
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Prepare export templates
+        run: mkdir -p ~/.config/godot
+      - name: Export Android APK
+        run: |
+          mkdir -p build
+          godot --headless --verbose --path . --editor --quit || true
+          godot --headless --path . --export-debug Android build/PuzzlePetHospital-Phase1.apk
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PuzzlePetHospital-Phase1-APK
+          path: build/PuzzlePetHospital-Phase1.apk
+          if-no-files-found: error
