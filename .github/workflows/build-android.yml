@@ -31,12 +31,13 @@ jobs:
           packages: ''
           accept-android-sdk-licenses: true
           log-accepted-android-sdk-licenses: false
-
+     
       - name: Install Android SDK packages
         run: |
-          sdkmanager "platform-tools"
-          sdkmanager "platforms;android-33"
-          sdkmanager "build-tools;33.0.2"
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0"
 
       - name: Install Android build tools
         run: |
@@ -71,7 +72,7 @@ jobs:
           test -f "$HOME/.local/share/godot/export_templates/4.3.stable/android_debug.apk"
           test -f "$HOME/.local/share/godot/export_templates/4.3.stable/android_release.apk"
 
-     ```yaml
+    
       - name: Configure Android export settings
         shell: bash
         run: |
@@ -105,7 +106,7 @@ jobs:
           test -x "$JAVA_HOME/bin/java"
           test -x "$ANDROID_HOME/platform-tools/adb"
           test -f "$HOME/.android/debug.keystore"
-```
+
 
 
       - name: Import Godot project
@@ -113,11 +114,14 @@ jobs:
           "$GODOT_BIN" --headless --editor --path . --quit
 
       - name: Export APK
+        shell: bash
         run: |
           mkdir -p build
           "$GODOT_BIN" --headless --path . \
             --export-debug "Android" \
-            build/PuzzlePetHospital-Phase1.apk
+            build/PuzzlePetHospital-Phase1.apk \
+            --verbose 2>&1 | tee build/export.log
+
           test -s build/PuzzlePetHospital-Phase1.apk
 
       - name: Upload APK
