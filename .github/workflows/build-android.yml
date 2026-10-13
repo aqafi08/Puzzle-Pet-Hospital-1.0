@@ -71,15 +71,22 @@ jobs:
           test -f "$HOME/.local/share/godot/export_templates/4.3.stable/android_debug.apk"
           test -f "$HOME/.local/share/godot/export_templates/4.3.stable/android_release.apk"
 
+     ```yaml
       - name: Configure Android export settings
+        shell: bash
         run: |
+          set -eu
+
           mkdir -p "$HOME/.android" "$HOME/.config/godot"
-          keytool -genkeypair -v \
+
+          keytool -genkeypair -noprompt \
             -keystore "$HOME/.android/debug.keystore" \
             -storepass android \
             -alias androiddebugkey \
             -keypass android \
-            -keyalg RSA -keysize 2048 -validity 10000 \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"
 
           cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
@@ -92,6 +99,14 @@ jobs:
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
           EOF
+
+          echo "JAVA_HOME=$JAVA_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          test -x "$JAVA_HOME/bin/java"
+          test -x "$ANDROID_HOME/platform-tools/adb"
+          test -f "$HOME/.android/debug.keystore"
+```
+
 
       - name: Import Godot project
         run: |
