@@ -12,23 +12,87 @@ permissions:
 
 jobs:
   build-apk:
-    runs-on: ubuntu-latest
-    container:
-      image: barichello/godot-ci:4.3
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout project
         uses: actions/checkout@v4
 
+      - name: Install Java and Android SDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build tools
+        run: |
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;33.0.2"
+
+      - name: Install Godot 4.3
+        run: |
+          mkdir -p "$RUNNER_TEMP/godot"
+          curl -fL --retry 3 \
+            "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip" \
+            -o "$RUNNER_TEMP/godot/godot.zip"
+          unzip -q "$RUNNER_TEMP/godot/godot.zip" \
+            -d "$RUNNER_TEMP/godot"
+          GODOT_BIN="$(find "$RUNNER_TEMP/godot" -type f -name 'Godot_v4.3-stable_linux.x86_64' | head -n 1)"
+          chmod +x "$GODOT_BIN"
+          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
+
+      - name: Install Godot export templates
+        run: |
+          mkdir -p "$RUNNER_TEMP/templates"
+          curl -fL --retry 3 \
+            "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz" \
+            -o "$RUNNER_TEMP/templates/templates.tpz"
+          unzip -q "$RUNNER_TEMP/templates/templates.tpz" \
+            -d "$RUNNER_TEMP/templates"
+          mkdir -p "$HOME/.local/share/godot/export_templates/4.3.stable"
+          cp -a "$RUNNER_TEMP/templates/templates/." \
+            "$HOME/.local/share/godot/export_templates/4.3.stable/"
+          test -f "$HOME/.local/share/godot/export_templates/4.3.stable/android_debug.apk"
+          test -f "$HOME/.local/share/godot/export_templates/4.3.stable/android_release.apk"
+
+      - name: Configure Android export settings
+        run: |
+          mkdir -p "$HOME/.android" "$HOME/.config/godot"
+          keytool -genkeypair -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+          cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/debug_keystore = "$HOME/.android/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOF
+
       - name: Import Godot project
-        run: godot --headless --editor --path . --quit
+        run: |
+          "$GODOT_BIN" --headless --editor --path . --quit
 
       - name: Export APK
         run: |
           mkdir -p build
-          godot --headless --path . \
+          "$GODOT_BIN" --headless --path . \
             --export-debug "Android" \
             build/PuzzlePetHospital-Phase1.apk
+          test -s build/PuzzlePetHospital-Phase1.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
