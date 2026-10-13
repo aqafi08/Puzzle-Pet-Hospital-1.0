@@ -1,126 +1,138 @@
-
 name: Build Android APK
 
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
+'on':
+workflow_dispatch:
+push:
+branches:
+- main
 
 permissions:
-  contents: read
+contents: read
 
 jobs:
-  build-apk:
-    runs-on: ubuntu-22.04
+build-apk:
+runs-on: ubuntu-22.04
 
-    steps:
-      - name: Checkout project
-        uses: actions/checkout@v4
 
-      - name: Install Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+env:
+  GODOT_VERSION: 4.3
+  ANDROID_HOME: /usr/local/lib/android/sdk
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+steps:
+  - name: Checkout project
+    uses: actions/checkout@v4
 
-      - name: Install Android SDK packages
-        shell: bash
-        run: |
-          set -euxo pipefail
-          sdkmanager --install \
-            "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;34.0.0"
+  - name: Install Java 17
+    uses: actions/setup-java@v4
+    with:
+      distribution: temurin
+      java-version: "17"
 
-      - name: Install Godot 4.3
-        shell: bash
-        run: |
-          set -euxo pipefail
-          mkdir -p "$RUNNER_TEMP/godot"
-          curl -fL --retry 3 \
-            "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip" \
-            -o "$RUNNER_TEMP/godot/godot.zip"
-          unzip -q "$RUNNER_TEMP/godot/godot.zip" \
-            -d "$RUNNER_TEMP/godot"
-          GODOT_BIN="$(find "$RUNNER_TEMP/godot" -type f -name 'Godot_v4.3-stable_linux.x86_64' | head -n 1)"
-          chmod +x "$GODOT_BIN"
-          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
+  - name: Set up Android SDK
+    uses: android-actions/setup-android@v3
 
-      - name: Install Godot export templates
-        shell: bash
-        run: |
-          set -euxo pipefail
-          mkdir -p "$RUNNER_TEMP/templates"
-          curl -fL --retry 3 \
-            "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz" \
-            -o "$RUNNER_TEMP/templates/templates.tpz"
-          unzip -q "$RUNNER_TEMP/templates/templates.tpz" \
-            -d "$RUNNER_TEMP/templates"
-          mkdir -p "$HOME/.local/share/godot/export_templates/4.3.stable"
-          cp -a "$RUNNER_TEMP/templates/templates/." \
-            "$HOME/.local/share/godot/export_templates/4.3.stable/"
-          test -f "$HOME/.local/share/godot/export_templates/4.3.stable/android_debug.apk"
+  - name: Install Android SDK packages
+    shell: bash
+    run: |
+      set -euxo pipefail
+      sdkmanager --install \
+        "platform-tools" \
+        "platforms;android-34" \
+        "build-tools;34.0.0"
 
-      - name: Configure Android export settings
-        shell: bash
-        run: |
-          set -euxo pipefail
-          mkdir -p "$HOME/.android" "$HOME/.config/godot"
+  - name: Download Godot
+    shell: bash
+    run: |
+      set -euxo pipefail
+      mkdir -p "$RUNNER_TEMP/godot"
+      curl -fL --retry 3 \
+        "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip" \
+        -o "$RUNNER_TEMP/godot/godot.zip"
+      unzip -oq "$RUNNER_TEMP/godot/godot.zip" \
+        -d "$RUNNER_TEMP/godot"
+      GODOT_BIN="$(find "$RUNNER_TEMP/godot" -type f -name 'Godot_v4.3-stable_linux.x86_64' | head -n 1)"
+      test -n "$GODOT_BIN"
+      chmod +x "$GODOT_BIN"
+      echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
 
-          keytool -genkeypair -noprompt \
-            -keystore "$HOME/.android/debug.keystore" \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
+  - name: Install Godot export templates
+    shell: bash
+    run: |
+      set -euxo pipefail
+      mkdir -p "$RUNNER_TEMP/templates"
+      curl -fL --retry 3 \
+        "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz" \
+        -o "$RUNNER_TEMP/templates/templates.tpz"
+      unzip -oq "$RUNNER_TEMP/templates/templates.tpz" \
+        -d "$RUNNER_TEMP/templates"
+      mkdir -p "$HOME/.local/share/godot/export_templates/4.3.stable"
+      cp -a "$RUNNER_TEMP/templates/templates/." \
+        "$HOME/.local/share/godot/export_templates/4.3.stable/"
+      test -f "$HOME/.local/share/godot/export_templates/4.3.stable/android_debug.apk"
 
-          cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
-          [gd_resource type="EditorSettings" format=3]
+  - name: Configure Android signing
+    shell: bash
+    run: |
+      set -euxo pipefail
+      mkdir -p "$HOME/.android"
+      keytool -genkeypair -noprompt \
+        -keystore "$HOME/.android/debug.keystore" \
+        -storepass android \
+        -alias androiddebugkey \
+        -keypass android \
+        -keyalg RSA -keysize 2048 -validity 10000 \
+        -dname "CN=Android Debug,O=Android,C=US"
 
-          [resource]
-          export/android/java_sdk_path = "$JAVA_HOME"
-          export/android/android_sdk_path = "$ANDROID_HOME"
-          export/android/debug_keystore = "$HOME/.android/debug.keystore"
-          export/android/debug_keystore_user = "androiddebugkey"
-          export/android/debug_keystore_pass = "android"
-          EOF
+  - name: Verify build environment
+    shell: bash
+    run: |
+      set -euxo pipefail
+      java -version
+      "$GODOT_BIN" --version
+      sdkmanager --list_installed
+      test -d "$ANDROID_HOME/platform-tools"
+      test -d "$ANDROID_HOME/platforms/android-34"
+      test -d "$ANDROID_HOME/build-tools/34.0.0"
+      test -f "$HOME/.android/debug.keystore"
+      test -f "$HOME/.local/share/godot/export_templates/4.3.stable/android_debug.apk"
 
-      - name: Verify Android configuration
-        shell: bash
-        run: |
-          set -euxo pipefail
-          java -version
-          test -d "$ANDROID_HOME/platform-tools"
-          test -d "$ANDROID_HOME/platforms/android-34"
-          test -d "$ANDROID_HOME/build-tools/34.0.0"
-          test -f "$HOME/.android/debug.keystore"
-          test -f "$HOME/.local/share/godot/export_templates/4.3.stable/android_debug.apk"
-          cat "$HOME/.config/godot/editor_settings-4.tres"
+  - name: Import Godot project
+    shell: bash
+    run: |
+      set -euxo pipefail
+      "$GODOT_BIN" --headless --editor --path "$GITHUB_WORKSPACE" --quit
 
-      - name: Import Godot project
-        shell: bash
-        run: |
-          "$GODOT_BIN" --headless --editor --path . --quit
+  - name: Verify Android export preset
+    shell: bash
+    run: |
+      set -euxo pipefail
+      test -f "$GITHUB_WORKSPACE/export_presets.cfg"
+      grep -n 'name="Android"' "$GITHUB_WORKSPACE/export_presets.cfg"
 
-      - name: Export APK
-        shell: bash
-        run: |
-          set -o pipefail
-          mkdir -p build
-          "$GODOT_BIN" --headless --path . \
-            --export-debug "Android" \
-            build/PuzzlePetHospital-Phase1.apk \
-            --verbose 2>&1 | tee build/export.log
-          test -s build/PuzzlePetHospital-Phase1.apk
+  - name: Export APK
+    shell: bash
+    run: |
+      set -euxo pipefail
+      mkdir -p build
+      "$GODOT_BIN" --headless --path "$GITHUB_WORKSPACE" \
+        --export-debug "Android" \
+        "$GITHUB_WORKSPACE/build/PuzzlePetHospital-Phase1.apk" \
+        --verbose 2>&1 | tee "$GITHUB_WORKSPACE/build/export.log"
+      test -s "$GITHUB_WORKSPACE/build/PuzzlePetHospital-Phase1.apk"
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: PuzzlePetHospital-Phase1-APK
-          path: build/PuzzlePetHospital-Phase1.apk
-          if-no-files-found: error
+  - name: Upload APK
+    if: success()
+    uses: actions/upload-artifact@v4
+    with:
+      name: PuzzlePetHospital-Phase1-APK
+      path: build/PuzzlePetHospital-Phase1.apk
+      if-no-files-found: error
+
+  - name: Upload export log on failure
+    if: failure()
+    uses: actions/upload-artifact@v4
+    with:
+      name: Godot-Android-Build-Logs
+      path: build/export.log
+      if-no-files-found: ignore
+
